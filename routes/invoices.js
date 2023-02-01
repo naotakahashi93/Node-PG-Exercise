@@ -89,21 +89,38 @@ router.post("/", async function(req, res, next){
 
 router.put("/:id", async function(req, res, next){
     try{
-        const amt = req.body.amt
+        const {amt, paid} = req.body
+        let paidDate = null;
 
-        const result = await db.query(
-            `UPDATE invoices SET amt=$1
-            WHERE id=$2
-            RETURNING id, comp_code, amt, paid, add_date, paid_date`, 
-            [amt, req.params.id]
+        const getResult = await db.query( // first we are getting the invoice of the id we are trying to update
+            `SELECT paid
+            FROM invoices 
+            WHERE id=$1`, 
+            [req.params.id]
         )
-
-        if(result.rows.length === 0){
+        
+        if(getResult.rows.length === 0){ // if that invoice does not exist we throw error
             throw new ExpressError(`No such invoice: ${req.params.id}`, 404)
         }
-        else{
-            return res.json({invoice: result.rows[0]})
+
+        const resultPaid = getResult.rows[0].paid_date // if that invoice has a paid_date value then we assign to this variable
+
+        if (!resultPaid && paid){ // if there is no value of resultPaid AKA that invoice is not paid and there value for paid is true we set the paid_date to todays date 
+            paidDate = new Date()
         }
+        else{
+            paidDate = null; // else we keep the paiddate as null
+        }
+       
+        const updateRes = await db.query( // then we update the invoice data with the new details
+            `UPDATE invoices 
+            SET amt=$1, paid=$2, paid_date=$3
+            WHERE id=$4
+            RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+            [amt, paid, paidDate, req.params.id]
+        )
+        return res.json({invoice: updateRes.rows[0]})
+        
 
     }
     catch(e){
